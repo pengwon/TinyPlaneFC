@@ -34,8 +34,8 @@ void app_main(void)
     adc_cali_handle_t adc1_cali_chan1_handle = NULL;
     adc_cali_handle_t adc1_cali_chan3_handle = NULL;
     bool do_calibration1_chan0 = example_adc_calibration_init(ADC_UNIT_1, BAT_VOLTAGE_ADC_CHANNEL, BAT_VOLTAGE_ADC_ATTEN, &adc1_cali_chan0_handle);
-    bool do_calibration1_chan1 = example_adc_calibration_init(ADC_UNIT_1, BAT_CURRENT_ADC_CHANNEL, BAT_CURRENT_ADC_ATTEN, &adc1_cali_chan1_handle);
-    bool do_calibration1_chan3 = example_adc_calibration_init(ADC_UNIT_1, BAT_TEMPERATURE_ADC_CHANNEL, BAT_TEMPERATURE_ADC_ATTEN, &adc1_cali_chan3_handle);
+    bool do_calibration1_chan1 = example_adc_calibration_init(ADC_UNIT_1, BAT_TEMPERATURE_ADC_CHANNEL, BAT_TEMPERATURE_ADC_ATTEN, &adc1_cali_chan1_handle);
+    bool do_calibration1_chan3 = example_adc_calibration_init(ADC_UNIT_1, BAT_CURRENT_ADC_CHANNEL, BAT_CURRENT_ADC_ATTEN, &adc1_cali_chan3_handle);
 
 
     while (1) {

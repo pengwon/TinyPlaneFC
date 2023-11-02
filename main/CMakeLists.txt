@@ -1,2 +1,2 @@
-idf_component_register(SRCS "bat.c" "motor.c" "oneshot_read_main.c"
+idf_component_register(SRCS "main.c" "bat.c" "motor.c"
                     INCLUDE_DIRS ".")
