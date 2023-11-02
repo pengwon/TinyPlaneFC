@@ -1,0 +1,16 @@
+{
+  "C_Cpp.intelliSenseEngine": "default",
+  "editor.suggest.snippetsPreventQuickSuggestions": false,
+  "aiXcoder.showTrayIcon": true,
+  "idf.adapterTargetName": "esp32c3",
+  "idf.openOcdConfigs": [
+    "board/esp32c3-builtin.cfg"
+  ],
+  "idf.portWin": "COM10",
+  "idf.flashType": "JTAG",
+  "files.associations": {
+    "protocol_examples_common.h": "c",
+    "ledc.h": "c",
+    "bat.h": "c"
+  }
+}
