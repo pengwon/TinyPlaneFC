@@ -65,6 +65,7 @@ void app_main(void)
     mpu6050_acce_value_t acce;
     mpu6050_gyro_value_t gyro;
     mpu6050_temp_value_t temp;
+    complimentary_angle_t complimentary_angle;
 
     i2c_master_init();
     hp203b_init();
@@ -92,7 +93,7 @@ void app_main(void)
             altitude[i % 4] = (3 * avg + tmp) / 4;
         }
         avg = (altitude[0] + altitude[1] + altitude[2] + altitude[3]) / 4;
-        ESP_LOGI(TAG, "Altitude: %f", avg);
+        ESP_LOGI(TAG, "Altitude: %f\n", avg);
 
         i++;
 
@@ -100,13 +101,16 @@ void app_main(void)
         ESP_LOGI(TAG, "device id:%X", mpu6050_deviceid);
 
         ret = mpu6050_get_acce(mpu6050, &acce);
-        ESP_LOGI(TAG, "acce_x:%.2f, acce_y:%.2f, acce_z:%.2f\n", acce.acce_x, acce.acce_y, acce.acce_z);
+        ESP_LOGI(TAG, "acce_x:%.2f, acce_y:%.2f, acce_z:%.2f", acce.acce_x, acce.acce_y, acce.acce_z);
 
         ret = mpu6050_get_gyro(mpu6050, &gyro);
-        ESP_LOGI(TAG, "gyro_x:%.2f, gyro_y:%.2f, gyro_z:%.2f\n", gyro.gyro_x, gyro.gyro_y, gyro.gyro_z);
+        ESP_LOGI(TAG, "gyro_x:%.2f, gyro_y:%.2f, gyro_z:%.2f", gyro.gyro_x, gyro.gyro_y, gyro.gyro_z);
 
         ret = mpu6050_get_temp(mpu6050, &temp);
-        ESP_LOGI(TAG, "t:%.2f \n", temp.temp);
+        ESP_LOGI(TAG, "t:%.2f", temp.temp);
+
+        ret = mpu6050_complimentory_filter(mpu6050, &acce, &gyro, &complimentary_angle);
+        ESP_LOGI(TAG, "angle_roll:%.2f, angle_pitch:%.2f", complimentary_angle.roll, complimentary_angle.pitch);
 
         vTaskDelay(pdMS_TO_TICKS(500));
     }
