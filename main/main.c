@@ -7,8 +7,9 @@
 #include "esp_log.h"
 
 #include "hp203.h"
+#include "mpu6050.h"
 
-const static char *TAG = "HP203_EXAMPLE";
+const static char *TAG = "I2C_EXAMPLE";
 
 #define I2C_MASTER_SCL_IO 8         /*!< GPIO number used for I2C master clock */
 #define I2C_MASTER_SDA_IO 9         /*!< GPIO number used for I2C master data  */
