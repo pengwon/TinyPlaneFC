@@ -46,22 +46,13 @@ static esp_err_t i2c_master_init(void)
  */
 static void mpu6050_init(void)
 {
+    esp_err_t ret;
+
     mpu6050 = mpu6050_create(I2C_MASTER_NUM, MPU6050_I2C_ADDRESS);
+
     ESP_ERROR_CHECK(mpu6050_config(mpu6050, ACCE_FS_4G, GYRO_FS_500DPS));
+
     ESP_ERROR_CHECK(mpu6050_wake_up(mpu6050));
-}
-
-static void read_sensor_task(void *pvParameters)
-{
-    while (1) {
-        ESP_ERROR_CHECK(hp203b_read_altitude(&altitude[0]));
-        ESP_ERROR_CHECK(hp203b_read_pressure(&pressure));
-        ESP_ERROR_CHECK(hp203b_read_temperature(&temperature));
-        mpu6050_get_acce(mpu6050, &acce);
-        mpu6050_get_gyro(mpu6050, &gyro);
-        mpu6050_get_temp(mpu6050, &temp);
-
-
 }
 
 void app_main(void)
