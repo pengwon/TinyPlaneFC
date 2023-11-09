@@ -6,11 +6,12 @@
   "idf.openOcdConfigs": [
     "board/esp32c3-builtin.cfg"
   ],
-  "idf.portWin": "COM14",
+  "idf.portWin": "COM10",
   "idf.flashType": "JTAG",
   "files.associations": {
     "protocol_examples_common.h": "c",
     "ledc.h": "c",
-    "bat.h": "c"
+    "bat.h": "c",
+    "hp203.h": "c"
   }
 }

@@ -12,9 +12,12 @@ extern "C" {
 #include "driver/i2c.h"
 
 #define HP203_I2C_PORT I2C_NUM_0
-#define HP203_I2C_ADDR 0x77
+#define HP203_I2C_ADDRESS 0x77
 #define HP203_I2C_TIME_OUT 100
 #define HP203_CONVERT_TIME 128
+
+#define HP203_INT_PA_RDY_EN (uint8_t) BIT5
+#define HP203_INT_T_RDY_EN (uint8_t) BIT4
 
 
 typedef enum {
@@ -58,6 +61,11 @@ esp_err_t hp203_read_temperature(hp203_handle_t sensor, float *temperature);
 esp_err_t hp203_read_altitude(hp203_handle_t sensor, float *altitude);
 esp_err_t hp203_read_pt(hp203_handle_t sensor, float *pressure, float *temperature);
 esp_err_t hp203_read_at(hp203_handle_t sensor, float *altitude, float *temperature);
+esp_err_t hp203_int_enable(hp203_handle_t sensor, uint8_t int_en);
+bool hp203_dev_ready(hp203_handle_t sensor);
+bool hp203_pa_ready(hp203_handle_t sensor);
+bool hp203_t_ready(hp203_handle_t sensor);
+
 
 #ifdef __cpluplus
 }
