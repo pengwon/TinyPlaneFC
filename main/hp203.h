@@ -12,7 +12,8 @@ extern "C" {
 #include "driver/i2c.h"
 
 #define HP203_I2C_PORT I2C_NUM_0
-#define HP203_I2C_ADDRESS 0x77
+#define HP203_I2C_ADDRESS_CSB_0 0x77
+#define HP203_I2C_ADDRESS_CSB_1 0x76
 #define HP203_I2C_TIME_OUT 100
 #define HP203_CONVERT_TIME 128
 

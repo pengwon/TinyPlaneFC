@@ -13,6 +13,12 @@ extern "C" {
 #define BAT_CURRENT_ADC_CHANNEL ADC_CHANNEL_3
 #define BAT_TEMPERATURE_ADC_CHANNEL ADC_CHANNEL_1
 
+typedef struct {
+    int voltage;
+    int current;
+    int temperature;
+} bat_data_t;
+
 void bat_init(void);
 int bat_get_voltage(void);
 int bat_get_current(void);

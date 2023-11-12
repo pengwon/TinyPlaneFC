@@ -15,6 +15,13 @@ extern "C" {
 #define L_MOTOR_ADC_CHANNEL ADC_CHANNEL_4
 #define R_MOTOR_ADC_CHANNEL ADC_CHANNEL_2
 
+typedef struct {
+    uint32_t duty_l;
+    uint32_t duty_r;
+    int32_t current_l;
+    int32_t current_r;
+} motor_data_t;
+
 void motor_init(void);
 void motor_set_duty(uint32_t duty_l, uint32_t duty_r);
 void motor_get_current(int *current_l, int *current_r);

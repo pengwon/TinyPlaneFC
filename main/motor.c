@@ -1,6 +1,6 @@
 #include "motor.h"
 
-static adc_oneshot_unit_handle_t adc1_handle;
+extern adc_oneshot_unit_handle_t adc1_handle;
 
 void motor_init(void)
 {
@@ -35,19 +35,7 @@ void motor_init(void)
     ledc_channel.hpoint         = 0;
     ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
 
-    //-------------ADC1 Init---------------//
-    adc_oneshot_unit_init_cfg_t init_config1 = {
-        .unit_id = ADC_UNIT_1,
-    };
-    ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_config1, &adc1_handle));
-
-    //-------------ADC1 Config---------------//
-    adc_oneshot_chan_cfg_t config = {
-        .bitwidth = ADC_BITWIDTH_DEFAULT,
-        .atten = MOTOR_ADC_ATTEN,
-    };
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, L_MOTOR_ADC_CHANNEL, &config));
-    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, R_MOTOR_ADC_CHANNEL, &config));
+    
 }
 
 void motor_set_duty(uint32_t duty_l, uint32_t duty_r)
