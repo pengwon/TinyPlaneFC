@@ -5,14 +5,37 @@
 #include "freertos/timers.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
+#include "sys/param.h"
 #include "soc/soc_caps.h"
+
+#include "esp_system.h"
+#include "esp_wifi.h"
+#include "esp_mac.h"
+#include "esp_event.h"
 #include "esp_log.h"
+#include "nvs_flash.h"
+#include "esp_netif.h"
+#include "protocol_examples_common.h"
+
+#include "lwip/err.h"
+#include "lwip/sockets.h"
+#include "lwip/sys.h"
+#include "lwip/netdb.h"
 
 #include "bat.h"
 #include "motor.h"
 #include "mpu6050.h"
 #include "hp203.h"
 
+/* The examples use WiFi configuration that you can set via project configuration menu.
+
+   If you'd rather not, just change the below entries to strings with
+   the config you want - ie #define EXAMPLE_WIFI_SSID "mywifissid"
+*/
+#define ESP_WIFI_SSID      "TinyPlaneFC"
+#define ESP_WIFI_PASS      "FC12345678"
+#define ESP_WIFI_CHANNEL   6
+#define MAX_STA_CONN       1
 
 #define I2C_MASTER_SCL_IO 8         /*!< GPIO number used for I2C master clock */
 #define I2C_MASTER_SDA_IO 9         /*!< GPIO number used for I2C master data  */
@@ -23,6 +46,9 @@
 #define I2C_MASTER_TIMEOUT_MS 1000
 
 #define SENSOR_DATA_BUFFER_MAX 16
+
+#define PORT CONFIG_EXAMPLE_PORT
+
 
 typedef struct {
     mpu6050_acce_value_t acce;
@@ -52,12 +78,72 @@ typedef struct {
 
 adc_oneshot_unit_handle_t adc1_handle;
 
-static const char *TAG = "I2C_EXAMPLE";
+static const char *TAG = "TinyPlaneFC";
 static mpu6050_handle_t mpu6050 = NULL;
 static hp203_handle_t hp203 = NULL;
 static sensor_data_buffer_t sensor_data_buffer;
 static uint32_t motor_duty_l = 0;
 static uint32_t motor_duty_r = 0;
+
+static void wifi_event_handler(void* arg, esp_event_base_t event_base,
+                                    int32_t event_id, void* event_data)
+{
+    if (event_id == WIFI_EVENT_AP_STACONNECTED) {
+        wifi_event_ap_staconnected_t* event = (wifi_event_ap_staconnected_t*) event_data;
+        ESP_LOGI(TAG, "station "MACSTR" join, AID=%d",
+                 MAC2STR(event->mac), event->aid);
+    } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
+        wifi_event_ap_stadisconnected_t* event = (wifi_event_ap_stadisconnected_t*) event_data;
+        ESP_LOGI(TAG, "station "MACSTR" leave, AID=%d",
+                 MAC2STR(event->mac), event->aid);
+    }
+}
+
+void wifi_init_softap(void)
+{
+    uint8_t mac[6] = {0x58, 0xc7, 0xac, 0x74, 0xee, 0xa0};
+
+    esp_netif_create_default_wifi_ap();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT,
+                                                        ESP_EVENT_ANY_ID,
+                                                        &wifi_event_handler,
+                                                        NULL,
+                                                        NULL));
+
+    wifi_config_t wifi_config = {
+        .ap = {
+            .ssid = ESP_WIFI_SSID,
+            .ssid_len = strlen(ESP_WIFI_SSID),
+            .channel = ESP_WIFI_CHANNEL,
+            .password = ESP_WIFI_PASS,
+            .max_connection = MAX_STA_CONN,
+#ifdef CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
+            .authmode = WIFI_AUTH_WPA3_PSK,
+            .sae_pwe_h2e = WPA3_SAE_PWE_BOTH,
+#else /* CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT */
+            .authmode = WIFI_AUTH_WPA2_PSK,
+#endif
+            .pmf_cfg = {
+                    .required = true,
+            },
+        },
+    };
+    if (strlen(ESP_WIFI_PASS) == 0) {
+        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
+    }
+
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
+    ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+    ESP_ERROR_CHECK(esp_wifi_set_mac(WIFI_IF_AP, mac));
+    ESP_ERROR_CHECK(esp_wifi_start());
+
+    ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
+             ESP_WIFI_SSID, ESP_WIFI_PASS, ESP_WIFI_CHANNEL);
+}
 
 /**
  * @brief i2c master initialization
@@ -121,7 +207,6 @@ static void hp203_init(void)
     ESP_ERROR_CHECK(hp203_reset(hp203));
     while(!hp203_dev_ready(hp203)) {
         ESP_LOGI(TAG, "waiting for hp203 ready...");
-        vTaskDelay(5 / portTICK_PERIOD_MS);
     }
     ESP_ERROR_CHECK(hp203_int_enable(hp203, HP203_INT_PA_RDY_EN | HP203_INT_T_RDY_EN));
     ESP_LOGI(TAG, "hp203 ready!");
@@ -171,7 +256,7 @@ static void sensor_data_buffer_init(void)
     sensor_data_buffer.sensor_data_write = 0;
 }
 
-static void update_sensor_data(void)
+static void update_sensor_data(TimerHandle_t timer)
 {
     hp203_convert_channel_t convert_channel = HP203_CONVERT_PT;
     hp203_convert_osr_t convert_osr = HP203_CONVERT_OSR_256;
@@ -187,12 +272,15 @@ static void update_sensor_data(void)
         ESP_LOGI(TAG, "BAT Temperature: %d", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].bat_data.temperature);
 
         sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.duty_l = motor_duty_l;
-        ESP_LOGI(TAG, "Motor Duty L: %lu", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.duty_l);
         sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.duty_r = motor_duty_r;
-        ESP_LOGI(TAG, "Motor Duty R: %lu", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.duty_r);
+        ESP_LOGI(TAG, "Motor Duty L: %lu, R: %lu",
+                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.duty_l,
+                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.duty_r);
         motor_get_current(&sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.current_l,
                           &sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.current_r);
-        ESP_LOGI(TAG, "Motor Current L: %ld", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.current_l);
+        ESP_LOGI(TAG, "Motor Current L: %ld, R: %ld",
+                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.current_l, 
+                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.current_r);
 
         ESP_ERROR_CHECK(mpu6050_get_acce(mpu6050,
                                          &sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.acce));
@@ -244,6 +332,166 @@ static void update_sensor_data(void)
     }
 }
 
+static void udp_server_task(void *pvParameters)
+{
+    char rx_buffer[128];
+    char addr_str[128];
+    int addr_family = (int)pvParameters;
+    int ip_protocol = 0;
+    struct sockaddr_in6 dest_addr;
+
+    uint32_t sensor_data_size_to_send = 0;
+
+    while (1) {
+
+        if (addr_family == AF_INET) {
+            struct sockaddr_in *dest_addr_ip4 = (struct sockaddr_in *)&dest_addr;
+            dest_addr_ip4->sin_addr.s_addr = htonl(INADDR_ANY);
+            dest_addr_ip4->sin_family = AF_INET;
+            dest_addr_ip4->sin_port = htons(PORT);
+            ip_protocol = IPPROTO_IP;
+        } else if (addr_family == AF_INET6) {
+            bzero(&dest_addr.sin6_addr.un, sizeof(dest_addr.sin6_addr.un));
+            dest_addr.sin6_family = AF_INET6;
+            dest_addr.sin6_port = htons(PORT);
+            ip_protocol = IPPROTO_IPV6;
+        }
+
+        int sock = socket(addr_family, SOCK_DGRAM, ip_protocol);
+        if (sock < 0) {
+            ESP_LOGE(TAG, "Unable to create socket: errno %d", errno);
+            break;
+        }
+        ESP_LOGI(TAG, "Socket created");
+
+#if defined(CONFIG_LWIP_NETBUF_RECVINFO) && !defined(CONFIG_EXAMPLE_IPV6)
+        int enable = 1;
+        lwip_setsockopt(sock, IPPROTO_IP, IP_PKTINFO, &enable, sizeof(enable));
+#endif
+
+#if defined(CONFIG_EXAMPLE_IPV4) && defined(CONFIG_EXAMPLE_IPV6)
+        if (addr_family == AF_INET6) {
+            // Note that by default IPV6 binds to both protocols, it is must be disabled
+            // if both protocols used at the same time (used in CI)
+            int opt = 1;
+            setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+            setsockopt(sock, IPPROTO_IPV6, IPV6_V6ONLY, &opt, sizeof(opt));
+        }
+#endif
+        // Set timeout
+        struct timeval timeout;
+        timeout.tv_sec = 10;
+        timeout.tv_usec = 0;
+        setsockopt (sock, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof timeout);
+
+        int err = bind(sock, (struct sockaddr *)&dest_addr, sizeof(dest_addr));
+        if (err < 0) {
+            ESP_LOGE(TAG, "Socket unable to bind: errno %d", errno);
+        }
+        ESP_LOGI(TAG, "Socket bound, port %d", PORT);
+
+        struct sockaddr_storage source_addr; // Large enough for both IPv4 or IPv6
+        socklen_t socklen = sizeof(source_addr);
+
+#if defined(CONFIG_LWIP_NETBUF_RECVINFO) && !defined(CONFIG_EXAMPLE_IPV6)
+        struct iovec iov;
+        struct msghdr msg;
+        struct cmsghdr *cmsgtmp;
+        u8_t cmsg_buf[CMSG_SPACE(sizeof(struct in_pktinfo))];
+
+        iov.iov_base = rx_buffer;
+        iov.iov_len = sizeof(rx_buffer);
+        msg.msg_control = cmsg_buf;
+        msg.msg_controllen = sizeof(cmsg_buf);
+        msg.msg_flags = 0;
+        msg.msg_iov = &iov;
+        msg.msg_iovlen = 1;
+        msg.msg_name = (struct sockaddr *)&source_addr;
+        msg.msg_namelen = socklen;
+#endif
+
+        while (1) {
+            ESP_LOGI(TAG, "Waiting for data");
+#if defined(CONFIG_LWIP_NETBUF_RECVINFO) && !defined(CONFIG_EXAMPLE_IPV6)
+            int len = recvmsg(sock, &msg, 0);
+#else
+            int len = recvfrom(sock, rx_buffer, sizeof(rx_buffer) - 1, 0, (struct sockaddr *)&source_addr, &socklen);
+#endif
+            // Error occurred during receiving
+            if (len < 0) {
+                ESP_LOGE(TAG, "recvfrom failed: errno %d", errno);
+                break;
+            }
+            // Data received
+            else {
+                // Get the sender's ip address as string
+                if (source_addr.ss_family == PF_INET) {
+                    inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str, sizeof(addr_str) - 1);
+#if defined(CONFIG_LWIP_NETBUF_RECVINFO) && !defined(CONFIG_EXAMPLE_IPV6)
+                    for ( cmsgtmp = CMSG_FIRSTHDR(&msg); cmsgtmp != NULL; cmsgtmp = CMSG_NXTHDR(&msg, cmsgtmp) ) {
+                        if ( cmsgtmp->cmsg_level == IPPROTO_IP && cmsgtmp->cmsg_type == IP_PKTINFO ) {
+                            struct in_pktinfo *pktinfo;
+                            pktinfo = (struct in_pktinfo*)CMSG_DATA(cmsgtmp);
+                            ESP_LOGI(TAG, "dest ip: %s", inet_ntoa(pktinfo->ipi_addr));
+                        }
+                    }
+#endif
+                } else if (source_addr.ss_family == PF_INET6) {
+                    inet6_ntoa_r(((struct sockaddr_in6 *)&source_addr)->sin6_addr, addr_str, sizeof(addr_str) - 1);
+                }
+
+                // rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string...
+                ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
+                for (int i = 0; i < (len / 4); i++)
+                {
+                    ESP_LOGI(TAG, "PWM Duty is %d", *(int *)(&rx_buffer[i * 4]));
+                }
+                
+                if (xSemaphoreTake(sensor_data_buffer.mutex, 10 / portTICK_PERIOD_MS) == pdTRUE)
+                {
+                    motor_duty_l = *(uint32_t *)(&rx_buffer[0]);
+                    motor_duty_r = *(uint32_t *)(&rx_buffer[4]);
+                    sensor_data_size_to_send = sensor_data_buffer.sensor_data_write - sensor_data_buffer.sensor_data_read;
+                    if (sensor_data_size_to_send > SENSOR_DATA_BUFFER_MAX)
+                    {
+                        sensor_data_size_to_send = SENSOR_DATA_BUFFER_MAX;
+                        sensor_data_buffer.sensor_data_read = sensor_data_buffer.sensor_data_write - SENSOR_DATA_BUFFER_MAX;
+                    }
+                    for (int i = 0; i < sensor_data_size_to_send; i++)
+                    {
+                        err = sendto(sock,
+                                     &sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_read % SENSOR_DATA_BUFFER_MAX],
+                                     sizeof(sensor_data_buffer.sensor_data[0]),
+                                     0,
+                                     (struct sockaddr *)&source_addr,
+                                     sizeof(source_addr));
+                        if (err < 0)
+                        {
+                            ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+                            break;
+                        }
+                        ESP_LOGI(TAG, "Sensor Data Read: %ld, Sent %d bytes to %s", sensor_data_buffer.sensor_data_read++, err, addr_str);
+                    }
+                    xSemaphoreGive(sensor_data_buffer.mutex);
+                    motor_set_duty(motor_duty_l, motor_duty_r);
+                }
+                if (err < 0)
+                {
+                    ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
+                    break;
+                }
+            }
+        }
+
+        if (sock != -1) {
+            ESP_LOGE(TAG, "Shutting down socket and restarting...");
+            shutdown(sock, 0);
+            close(sock);
+        }
+    }
+    vTaskDelete(NULL);
+}
+
 void app_main(void)
 {
     uint8_t mpu6050_deviceid;
@@ -281,14 +529,34 @@ void app_main(void)
     ESP_ERROR_CHECK(mpu6050_get_deviceid(mpu6050, &mpu6050_deviceid));
     ESP_LOGI(TAG, "device id:%X", mpu6050_deviceid);
 
+    //Initialize NVS
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+    ESP_ERROR_CHECK(esp_netif_init());
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+
+    ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
+    wifi_init_softap();
+
+    /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
+     * Read "Establishing Wi-Fi or Ethernet Connection" section in
+     * examples/protocols/README.md for more information about this function.
+     */
+    // ESP_ERROR_CHECK(example_connect());
+
+
     // xTaskCreate(read_hp203_task, "read_hp203", 4096, NULL, 10, NULL);
     // 创建定时器
     TimerHandle_t timer = xTimerCreate(
-        "MyTimer",          // 定时器名称
-        pdMS_TO_TICKS(1000), // 周期性定时器的周期，这里是 1000 毫秒
-        pdTRUE,             // 定时器在一次触发后自动重置
-        (void *)0,          // 定时器ID，可以用于传递参数
-        update_sensor_data      // 定时器回调函数
+        "UpdateSensorTimer",          
+        pdMS_TO_TICKS(1000), 
+        pdTRUE,             
+        (void *)0,          
+        (TimerCallbackFunction_t)update_sensor_data      
     );
 
     // 启动定时器
@@ -299,19 +567,10 @@ void app_main(void)
     // 这里可以继续执行其他初始化操作或任务
     // ...
 
-    // 进入 FreeRTOS 任务调度器
-    // vTaskStartScheduler();
-
-    // while (1)
-    // {
-        
-
-        
-
-        
-
-    //     vTaskDelay(pdMS_TO_TICKS(500));
-    // }
-    
-    // ESP_ERROR_CHECK(i2c_driver_delete(I2C_MASTER_NUM));
+#ifdef CONFIG_EXAMPLE_IPV4
+    xTaskCreate(udp_server_task, "udp_server", 4096, (void*)AF_INET, 5, NULL);
+#endif
+#ifdef CONFIG_EXAMPLE_IPV6
+    xTaskCreate(udp_server_task, "udp_server", 4096, (void*)AF_INET6, 5, NULL);
+#endif
 }
