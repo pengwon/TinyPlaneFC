@@ -12,6 +12,7 @@
     "protocol_examples_common.h": "c",
     "ledc.h": "c",
     "bat.h": "c",
-    "hp203.h": "c"
+    "hp203.h": "c",
+    "netdb.h": "c"
   }
 }
