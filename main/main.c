@@ -539,21 +539,21 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
-    wifi_init_softap();
+    // ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
+    // wifi_init_softap();
 
     /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
      * Read "Establishing Wi-Fi or Ethernet Connection" section in
      * examples/protocols/README.md for more information about this function.
      */
-    // ESP_ERROR_CHECK(example_connect());
+    ESP_ERROR_CHECK(example_connect());
 
 
     // xTaskCreate(read_hp203_task, "read_hp203", 4096, NULL, 10, NULL);
     // 创建定时器
     TimerHandle_t timer = xTimerCreate(
         "UpdateSensorTimer",          
-        pdMS_TO_TICKS(1000), 
+        pdMS_TO_TICKS(10), 
         pdTRUE,             
         (void *)0,          
         (TimerCallbackFunction_t)update_sensor_data      

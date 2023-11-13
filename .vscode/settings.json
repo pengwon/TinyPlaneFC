@@ -6,7 +6,7 @@
   "idf.openOcdConfigs": [
     "board/esp32c3-builtin.cfg"
   ],
-  "idf.portWin": "COM7",
+  "idf.portWin": "COM3",
   "idf.flashType": "JTAG",
   "files.associations": {
     "protocol_examples_common.h": "c",
