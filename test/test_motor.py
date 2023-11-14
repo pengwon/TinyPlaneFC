@@ -8,7 +8,7 @@ import keyboard
 client_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
 
 # Server IP and port
-server_ip = '192.168.1.79'
+server_ip = '192.168.4.1'
 server_port = 3333
 server_address = (server_ip, server_port)
 
@@ -31,14 +31,17 @@ def send_data():
         time.sleep(0.1)
 
 def receive_data():
+    cnt = 0
     while True:
         # Receive the response from the server
-        data, _ = client_socket.recvfrom(1024)
+        data, _ = client_socket.recvfrom(128)
         # Unpack the data
         dat = struct.unpack("<iiiiiiiffffffffff", data)
         # Print the unpacked data
-        for d in dat:
-            print(d)
+        # for d in dat:
+        print(cnt, dat)
+
+        cnt += 1
 
 # Register the keyboard hooks
 keyboard.on_press_key("up", lambda _: increase_i())

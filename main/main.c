@@ -176,30 +176,6 @@ static void mpu6050_init(void)
     ESP_ERROR_CHECK(mpu6050_wake_up(mpu6050));
 }
 
-static void read_mpu6050_task(void *pvParameters)
-{
-    esp_err_t ret;
-    mpu6050_acce_value_t acce;
-    mpu6050_gyro_value_t gyro;
-    mpu6050_temp_value_t temp;
-    complimentary_angle_t complimentary_angle;
-
-    while (1) {
-        ret = mpu6050_get_acce(mpu6050, &acce);
-        ESP_LOGI(TAG, "acce_x:%.2f, acce_y:%.2f, acce_z:%.2f", acce.acce_x, acce.acce_y, acce.acce_z);
-
-        ret = mpu6050_get_gyro(mpu6050, &gyro);
-        ESP_LOGI(TAG, "gyro_x:%.2f, gyro_y:%.2f, gyro_z:%.2f", gyro.gyro_x, gyro.gyro_y, gyro.gyro_z);
-
-        ret = mpu6050_get_temp(mpu6050, &temp);
-        ESP_LOGI(TAG, "t:%.2f", temp.temp);
-
-        ret = mpu6050_complimentory_filter(mpu6050, &acce, &gyro, &complimentary_angle);
-        ESP_LOGI(TAG, "angle_roll:%.2f, angle_pitch:%.2f", complimentary_angle.roll, complimentary_angle.pitch);
-    }
-    mpu6050_delete(mpu6050);
-
-}
 
 static void hp203_init(void)
 {
@@ -212,42 +188,6 @@ static void hp203_init(void)
     ESP_LOGI(TAG, "hp203 ready!");
 }
 
-static void read_hp203_task(void *pvParameters)
-{
-    hp203_convert_channel_t convert_channel = HP203_CONVERT_PT;
-    hp203_convert_osr_t convert_osr = HP203_CONVERT_OSR_256;
-    float pressure, temperature, altitude;
-
-    while (1)
-    {
-        ESP_ERROR_CHECK(hp203_start_convert(hp203, convert_channel, convert_osr));
-
-        if (convert_channel == HP203_CONVERT_PT)
-        {
-            vTaskDelay((HP203_CONVERT_TIME >> convert_osr) / portTICK_PERIOD_MS);
-            while (!hp203_pa_ready(hp203) || !hp203_t_ready(hp203))
-            {
-                ESP_LOGI(TAG, "waiting for hp203 convert...");
-            }
-            ESP_ERROR_CHECK(hp203_read_pt(hp203, &pressure, &temperature));
-            ESP_ERROR_CHECK(hp203_read_altitude(hp203, &altitude));
-            ESP_LOGI(TAG, "Pressure: %.2f, Temperature: %.2f, Altitude: %.2f", pressure, temperature, altitude);
-        }
-        else
-        {
-            vTaskDelay((HP203_CONVERT_TIME >> (convert_osr + 1)) / portTICK_PERIOD_MS);
-            while (!hp203_t_ready(hp203))
-            {
-                ESP_LOGI(TAG, "waiting for hp203 convert...");
-            }
-            ESP_ERROR_CHECK(hp203_read_temperature(hp203, &temperature));
-            ESP_LOGI(TAG, "Temperature: %f", temperature);
-        }
-
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-    hp203_delete(hp203);
-}
 
 static void sensor_data_buffer_init(void)
 {
@@ -265,69 +205,70 @@ static void update_sensor_data(TimerHandle_t timer)
     if (xSemaphoreTake(sensor_data_buffer.mutex, 10 / portTICK_PERIOD_MS) == pdTRUE)
     {
         sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].bat_data.voltage = bat_get_voltage();
-        ESP_LOGI(TAG, "BAT Voltage: %d", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].bat_data.voltage);
+        // ESP_LOGI(TAG, "BAT Voltage: %d", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].bat_data.voltage);
         sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].bat_data.current = bat_get_current();
-        ESP_LOGI(TAG, "BAT Current: %d", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].bat_data.current);
+        // ESP_LOGI(TAG, "BAT Current: %d", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].bat_data.current);
         sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].bat_data.temperature = bat_get_temperature();
-        ESP_LOGI(TAG, "BAT Temperature: %d", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].bat_data.temperature);
+        // ESP_LOGI(TAG, "BAT Temperature: %d", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].bat_data.temperature);
 
         sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.duty_l = motor_duty_l;
         sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.duty_r = motor_duty_r;
-        ESP_LOGI(TAG, "Motor Duty L: %lu, R: %lu",
-                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.duty_l,
-                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.duty_r);
+        // ESP_LOGI(TAG, "Motor Duty L: %lu, R: %lu",
+        //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.duty_l,
+        //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.duty_r);
         motor_get_current(&sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.current_l,
                           &sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.current_r);
-        ESP_LOGI(TAG, "Motor Current L: %ld, R: %ld",
-                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.current_l, 
-                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.current_r);
+        // ESP_LOGI(TAG, "Motor Current L: %ld, R: %ld",
+        //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.current_l, 
+        //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].motor_data.current_r);
 
         ESP_ERROR_CHECK(mpu6050_get_acce(mpu6050,
                                          &sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.acce));
-        ESP_LOGI(TAG, "acce_x:%.2f, acce_y:%.2f, acce_z:%.2f",
-                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.acce.acce_x,
-                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.acce.acce_y,
-                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.acce.acce_z);
+        // ESP_LOGI(TAG, "acce_x:%.2f, acce_y:%.2f, acce_z:%.2f",
+        //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.acce.acce_x,
+        //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.acce.acce_y,
+        //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.acce.acce_z);
         ESP_ERROR_CHECK(mpu6050_get_gyro(mpu6050,
                                          &sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.gyro));
-        ESP_LOGI(TAG, "gyro_x:%.2f, gyro_y:%.2f, gyro_z:%.2f",
-                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.gyro.gyro_x,
-                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.gyro.gyro_y,
-                 sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.gyro.gyro_z);
+        // ESP_LOGI(TAG, "gyro_x:%.2f, gyro_y:%.2f, gyro_z:%.2f",
+        //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.gyro.gyro_x,
+        //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.gyro.gyro_y,
+        //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.gyro.gyro_z);
         
         ESP_ERROR_CHECK(mpu6050_get_temp(mpu6050,
                                          &sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.temp));
-        ESP_LOGI(TAG, "temp:%.2f", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.temp.temp);
+        // ESP_LOGI(TAG, "temp:%.2f", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].mpu6050_data.temp.temp);
         
         if (convert_channel == HP203_CONVERT_PT)
         {
             vTaskDelay((HP203_CONVERT_TIME >> convert_osr) / portTICK_PERIOD_MS);
             while (!hp203_pa_ready(hp203) || !hp203_t_ready(hp203))
             {
-                ESP_LOGI(TAG, "waiting for hp203 convert...");
+                // ESP_LOGI(TAG, "waiting for hp203 convert...");
             }
             ESP_ERROR_CHECK(hp203_read_pt(hp203,
                                           &sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].hp203_data.pressure,
                                           &sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].hp203_data.temperature));
             ESP_ERROR_CHECK(hp203_read_altitude(hp203,
                                                 &sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].hp203_data.altitude));
-            ESP_LOGI(TAG, "Pressure: %.2f, Temperature: %.2f, Altitude: %.2f",
-                     sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].hp203_data.pressure,
-                     sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].hp203_data.temperature,
-                     sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].hp203_data.altitude);
+            // ESP_LOGI(TAG, "Pressure: %.2f, Temperature: %.2f, Altitude: %.2f",
+            //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].hp203_data.pressure,
+            //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].hp203_data.temperature,
+            //          sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].hp203_data.altitude);
         }
         else
         {
             vTaskDelay((HP203_CONVERT_TIME >> (convert_osr + 1)) / portTICK_PERIOD_MS);
             while (!hp203_t_ready(hp203))
             {
-                ESP_LOGI(TAG, "waiting for hp203 convert...");
+                // ESP_LOGI(TAG, "waiting for hp203 convert...");
             }
             ESP_ERROR_CHECK(hp203_read_temperature(hp203,
                                                    &sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].hp203_data.temperature));
-            ESP_LOGI(TAG, "Temperature: %.2f", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].hp203_data.temperature);
+            // ESP_LOGI(TAG, "Temperature: %.2f", sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX].hp203_data.temperature);
         }
-        ESP_LOGI(TAG, "data_write: %lu", sensor_data_buffer.sensor_data_write++);
+        ESP_LOGI(TAG, "data_write: %d", (unsigned int)sensor_data_buffer.sensor_data_write);
+        sensor_data_buffer.sensor_data_write++;
         xSemaphoreGive(sensor_data_buffer.mutex);
     }
 }
@@ -442,15 +383,12 @@ static void udp_server_task(void *pvParameters)
 
                 // rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string...
                 ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
-                for (int i = 0; i < (len / 4); i++)
-                {
-                    ESP_LOGI(TAG, "PWM Duty is %d", *(int *)(&rx_buffer[i * 4]));
-                }
                 
-                if (xSemaphoreTake(sensor_data_buffer.mutex, 10 / portTICK_PERIOD_MS) == pdTRUE)
+                if (xSemaphoreTake(sensor_data_buffer.mutex, 20 / portTICK_PERIOD_MS) == pdTRUE)
                 {
                     motor_duty_l = *(uint32_t *)(&rx_buffer[0]);
                     motor_duty_r = *(uint32_t *)(&rx_buffer[4]);
+                    ESP_LOGI(TAG, "PWM Duty L: %d, R: %d", (int)motor_duty_l, (int)motor_duty_r);
                     sensor_data_size_to_send = sensor_data_buffer.sensor_data_write - sensor_data_buffer.sensor_data_read;
                     if (sensor_data_size_to_send > SENSOR_DATA_BUFFER_MAX)
                     {
@@ -470,7 +408,8 @@ static void udp_server_task(void *pvParameters)
                             ESP_LOGE(TAG, "Error occurred during sending: errno %d", errno);
                             break;
                         }
-                        ESP_LOGI(TAG, "Sensor Data Read: %ld, Sent %d bytes to %s", sensor_data_buffer.sensor_data_read++, err, addr_str);
+                        ESP_LOGI(TAG, "Sensor Data Read: %d, Sent %d bytes to %s", (unsigned int)sensor_data_buffer.sensor_data_read, err, addr_str);
+                        sensor_data_buffer.sensor_data_read++;
                     }
                     xSemaphoreGive(sensor_data_buffer.mutex);
                     motor_set_duty(motor_duty_l, motor_duty_r);
@@ -539,17 +478,17 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
-    // ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
-    // wifi_init_softap();
+    ESP_LOGI(TAG, "ESP_WIFI_MODE_AP");
+    wifi_init_softap();
 
     /* This helper function configures Wi-Fi or Ethernet, as selected in menuconfig.
      * Read "Establishing Wi-Fi or Ethernet Connection" section in
      * examples/protocols/README.md for more information about this function.
      */
-    ESP_ERROR_CHECK(example_connect());
+    // ESP_ERROR_CHECK(example_connect());
 
 
-    // xTaskCreate(read_hp203_task, "read_hp203", 4096, NULL, 10, NULL);
+    
     // 创建定时器
     TimerHandle_t timer = xTimerCreate(
         "UpdateSensorTimer",          
