@@ -55,3 +55,5 @@ build
 sdkconfig
 sdkconfig.ci
 sdkconfig.old
+dependencies.lock
+managed_components

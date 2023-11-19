@@ -31,17 +31,15 @@ def send_data():
         time.sleep(0.1)
 
 def receive_data():
-    cnt = 0
     while True:
         # Receive the response from the server
         data, _ = client_socket.recvfrom(128)
         # Unpack the data
-        dat = struct.unpack("<iiiiiiiffffffffff", data)
+        dat = struct.unpack("<iiiiiiiiffffffffff", data)
         # Print the unpacked data
         # for d in dat:
-        print(cnt, dat)
+        print(dat)
 
-        cnt += 1
 
 # Register the keyboard hooks
 keyboard.on_press_key("up", lambda _: increase_i())
