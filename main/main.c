@@ -336,8 +336,8 @@ static void udp_init(void)
 
         ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
     }
-    xTaskCreate(udp_receive_task, "udp_receive", 1024 * 4, (void*)AF_INET, 5, NULL);
-    xTaskCreate(udp_send_task, "udp_send", 1024 * 4, (void*)AF_INET, 5, NULL);
+    xTaskCreate(udp_receive_task, "udp_receive", 1024 * 4, (void*)AF_INET, 4, NULL);
+    xTaskCreate(udp_send_task, "udp_send", 1024 * 4, (void*)AF_INET, 4, NULL);
 }
 
 static void udp_deinit(void)
@@ -355,7 +355,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         ESP_LOGI(TAG, "station " MACSTR " join, AID=%d", MAC2STR(event->mac), event->aid);
         wifi_connected = true;
         udp_init();
-        xTaskCreate(update_sensor_task, "updata_sensor", 1024 * 8, NULL, 4, NULL);
+        xTaskCreate(update_sensor_task, "updata_sensor", 1024 * 8, NULL, 5, NULL);
     }
     else if (event_id == WIFI_EVENT_AP_STADISCONNECTED)
     {
