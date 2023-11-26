@@ -21,6 +21,15 @@ def increase_i():
 def decrease_i():
     global i
     i -= 100
+    if (i < 10):
+        i = 0
+
+def start():
+    global i
+    i = 1000
+def stop():
+    global i
+    i = 0
 
 def send_data():
     global i
@@ -44,6 +53,8 @@ def receive_data():
 # Register the keyboard hooks
 keyboard.on_press_key("up", lambda _: increase_i())
 keyboard.on_press_key("down", lambda _: decrease_i())
+keyboard.on_press_key("enter", lambda _: start())
+keyboard.on_press_key("space", lambda _: stop())
 
 # Create threads
 send_thread = threading.Thread(target=send_data)
