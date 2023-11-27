@@ -1,6 +1,13 @@
 #include "motor.h"
+#include "pid.h"
 
 extern adc_oneshot_unit_handle_t adc1_handle;
+
+static int current_offset_l = 0;
+static int current_offset_r = 0;
+static delta_pid_t pid;
+static int duty_l = 0;
+static int duty_r = 0;
 
 void motor_init(void)
 {
@@ -34,8 +41,29 @@ void motor_init(void)
     ledc_channel.duty           = 0; // Set duty to 0%
     ledc_channel.hpoint         = 0;
     ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
+}
 
-    
+static void _motor_get_current(int *current_l, int *current_r)
+{
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, L_MOTOR_ADC_CHANNEL, current_l));
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, R_MOTOR_ADC_CHANNEL, current_r));
+}
+
+void motor_update_current_offset(void)
+{
+    int current_l = 0;
+    int current_r = 0;
+
+    motor_set_duty(0, 0);
+    while (1)
+    {
+        _motor_get_current(&current_offset_l, &current_offset_r);
+        if ((-2 <= (current_offset_l - current_l) <= 2) && (-2 <= (current_offset_r - current_r) <= 2)) {
+            break;
+        }
+        current_l = current_offset_l;
+        current_r = current_offset_r;
+    }
 }
 
 void motor_set_duty(uint32_t duty_l, uint32_t duty_r)
@@ -48,6 +76,41 @@ void motor_set_duty(uint32_t duty_l, uint32_t duty_r)
 
 void motor_get_current(int *current_l, int *current_r)
 {
-    adc_oneshot_read(adc1_handle, L_MOTOR_ADC_CHANNEL, current_l);
-    adc_oneshot_read(adc1_handle, R_MOTOR_ADC_CHANNEL, current_r);
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, L_MOTOR_ADC_CHANNEL, current_l));
+    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, R_MOTOR_ADC_CHANNEL, current_r));
+
+    *current_l -= current_offset_l;
+    *current_r -= current_offset_r;
+}
+
+void motor_init_pid(void)
+{
+    delta_pid_init(&pid, MOTOR_KP, MOTOR_KI, MOTOR_KD);
+}
+
+void motor_set_throttle(int throttle_l, int throttle_r)
+{
+    int current_l = 0;
+    int current_r = 0;
+    motor_get_current(&current_l, &current_r);
+
+    throttle_l = throttle_l > MOTOR_THROTTLE_MAX ? MOTOR_THROTTLE_MAX : throttle_l;
+    throttle_l = throttle_l < MOTOR_THROTTLE_MIN ? MOTOR_THROTTLE_MIN : throttle_l;
+    throttle_r = throttle_r > MOTOR_THROTTLE_MAX ? MOTOR_THROTTLE_MAX : throttle_r;
+    throttle_r = throttle_r < MOTOR_THROTTLE_MIN ? MOTOR_THROTTLE_MIN : throttle_r;
+
+    float setpoint_l = (throttle_l - MOTOR_THROTTLE_MIN) / (MOTOR_THROTTLE_MAX - MOTOR_THROTTLE_MIN) * MOTOR_CURRENT_MAX;
+    float setpoint_r = (throttle_r - MOTOR_THROTTLE_MIN) / (MOTOR_THROTTLE_MAX - MOTOR_THROTTLE_MIN) * MOTOR_CURRENT_MAX;
+
+    float delta_duty_l = delta_pid_update(&pid, setpoint_l, current_l);
+    float delta_duty_r = delta_pid_update(&pid, setpoint_r, current_r);
+
+    duty_l += delta_duty_l;
+    duty_r += delta_duty_r;
+    duty_l = duty_l > MOTOR_PWM_DUTY_MAX ? MOTOR_PWM_DUTY_MAX : duty_l;
+    duty_l = duty_l < MOTOR_PWM_DUTY_MIN ? MOTOR_PWM_DUTY_MIN : duty_l;
+    duty_r = duty_r > MOTOR_PWM_DUTY_MAX ? MOTOR_PWM_DUTY_MAX : duty_r;
+    duty_r = duty_r < MOTOR_PWM_DUTY_MIN ? MOTOR_PWM_DUTY_MIN : duty_r;
+
+    motor_set_duty(duty_l, duty_r);
 }
