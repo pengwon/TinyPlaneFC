@@ -18,7 +18,7 @@ extern "C" {
 #define L_MOTOR_ADC_CHANNEL ADC_CHANNEL_4
 #define R_MOTOR_ADC_CHANNEL ADC_CHANNEL_2
 
-#define MOTOR_CURRENT_MAX 1000
+#define MOTOR_CURRENT_MAX 100
 #define MOTOR_CURRENT_MIN 0
 #define MOTOR_THROTTLE_MAX 2000
 #define MOTOR_THROTTLE_MIN 1000
@@ -36,6 +36,7 @@ typedef struct {
 } motor_data_t;
 
 void motor_init(void);
+void motor_init_pid(void);
 void motor_update_current_offset(void);
 void motor_set_frequency(uint32_t frequency);
 void motor_set_duty(uint32_t duty_l, uint32_t duty_r);

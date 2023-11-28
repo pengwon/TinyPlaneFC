@@ -177,8 +177,9 @@ static void play_disarmed_sound(void)
 
 static void update_actuator_task(void *pvParameters)
 {
+    throttle = 1000;
+
     motor_init_pid();
-    
     while (armed)
     {
         motor_set_throttle(throttle, throttle);
@@ -198,13 +199,15 @@ static void update_sensor_task(void *pvParameters)
         {
             ESP_LOGI(TAG, "armed!");
             play_armed_sound();
+            motor_init_pid();
+            throttle = 1000;
             armed = 1;
             break;
         }
         vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    xTaskCreate(update_actuator_task, "update_actuator", 1024 * 4, NULL, 2, NULL);
+    // xTaskCreate(update_actuator_task, "update_actuator", 1024 * 4, NULL, 2, NULL);
 
     while (xSemaphoreTake(sensor_data_buffer.mutex, portMAX_DELAY) == pdTRUE)
     {
@@ -242,6 +245,7 @@ static void update_sensor_task(void *pvParameters)
         }
         
         sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX] = sensor_data;
+        motor_set_throttle(throttle, throttle);
         
         ESP_LOGI(TAG, "data_write: %d", (unsigned int)sensor_data_buffer.sensor_data_write);
         sensor_data_buffer.sensor_data_write++;

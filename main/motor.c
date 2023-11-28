@@ -69,7 +69,7 @@ void motor_update_current_offset(void)
     ESP_LOGI("MOTOR CURRENT OFFSET", "L: %d, R: %d", current_offset_l, current_offset_r);
 }
 
-void motor_set_freqency(uint32_t frequency)
+void motor_set_frequency(uint32_t frequency)
 {
     ESP_ERROR_CHECK(ledc_set_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0, frequency));
 }
@@ -112,6 +112,7 @@ void motor_set_throttle(int throttle_l, int throttle_r)
 
     float delta_duty_l = pid_delta_update(&pid, setpoint_l, current_l);
     float delta_duty_r = pid_delta_update(&pid, setpoint_r, current_r);
+    ESP_LOGI("MOTOR CURRENT", "L: %f, R: %f", delta_duty_l, delta_duty_r);
 
     duty_l += delta_duty_l;
     duty_r += delta_duty_r;
