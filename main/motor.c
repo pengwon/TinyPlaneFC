@@ -1,5 +1,6 @@
 #include "motor.h"
 #include "pid.h"
+#include "esp_log.h"
 
 extern adc_oneshot_unit_handle_t adc1_handle;
 
@@ -43,7 +44,7 @@ void motor_init(void)
     ESP_ERROR_CHECK(ledc_channel_config(&ledc_channel));
 }
 
-static void _motor_get_current(int *current_l, int *current_r)
+static void get_current(int *current_l, int *current_r)
 {
     ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, L_MOTOR_ADC_CHANNEL, current_l));
     ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, R_MOTOR_ADC_CHANNEL, current_r));
@@ -57,13 +58,20 @@ void motor_update_current_offset(void)
     motor_set_duty(0, 0);
     while (1)
     {
-        _motor_get_current(&current_offset_l, &current_offset_r);
-        if ((-2 <= (current_offset_l - current_l) <= 2) && (-2 <= (current_offset_r - current_r) <= 2)) {
+        get_current(&current_offset_l, &current_offset_r);
+        if (-2 <= (current_offset_l - current_l) && (current_offset_l - current_l) <= 2 && -2 <= (current_offset_r - current_r) && (current_offset_r - current_r) <= 2)
+        {
             break;
         }
         current_l = current_offset_l;
         current_r = current_offset_r;
     }
+    ESP_LOGI("MOTOR CURRENT OFFSET", "L: %d, R: %d", current_offset_l, current_offset_r);
+}
+
+void motor_set_freqency(uint32_t frequency)
+{
+    ESP_ERROR_CHECK(ledc_set_freq(LEDC_LOW_SPEED_MODE, LEDC_TIMER_0, frequency));
 }
 
 void motor_set_duty(uint32_t duty_l, uint32_t duty_r)
@@ -85,7 +93,7 @@ void motor_get_current(int *current_l, int *current_r)
 
 void motor_init_pid(void)
 {
-    delta_pid_init(&pid, MOTOR_KP, MOTOR_KI, MOTOR_KD);
+    pid_delta_init(&pid, MOTOR_KP, MOTOR_KI, MOTOR_KD);
 }
 
 void motor_set_throttle(int throttle_l, int throttle_r)
@@ -102,8 +110,8 @@ void motor_set_throttle(int throttle_l, int throttle_r)
     float setpoint_l = (throttle_l - MOTOR_THROTTLE_MIN) / (MOTOR_THROTTLE_MAX - MOTOR_THROTTLE_MIN) * MOTOR_CURRENT_MAX;
     float setpoint_r = (throttle_r - MOTOR_THROTTLE_MIN) / (MOTOR_THROTTLE_MAX - MOTOR_THROTTLE_MIN) * MOTOR_CURRENT_MAX;
 
-    float delta_duty_l = delta_pid_update(&pid, setpoint_l, current_l);
-    float delta_duty_r = delta_pid_update(&pid, setpoint_r, current_r);
+    float delta_duty_l = pid_delta_update(&pid, setpoint_l, current_l);
+    float delta_duty_r = pid_delta_update(&pid, setpoint_r, current_r);
 
     duty_l += delta_duty_l;
     duty_r += delta_duty_r;

@@ -16,8 +16,8 @@ typedef struct {
     float prev_error[2];
 } delta_pid_t;
 
-void delta_pid_init(delta_pid_t *pid, float kp, float ki, float kd);
-float delta_pid_update(delta_pid_t *pid, float setpoint, float actual);
+void pid_delta_init(delta_pid_t *pid, float kp, float ki, float kd);
+float pid_delta_update(delta_pid_t *pid, float setpoint, float actual);
 
 #ifdef __cplusplus
 }

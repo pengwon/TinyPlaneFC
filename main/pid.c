@@ -1,6 +1,6 @@
 #include "pid.h"
 
-void delta_pid_init(delta_pid_t *pid, float kp, float ki, float kd)
+void pid_delta_init(delta_pid_t *pid, float kp, float ki, float kd)
 {
     pid->kp = kp;
     pid->ki = ki;
@@ -10,7 +10,7 @@ void delta_pid_init(delta_pid_t *pid, float kp, float ki, float kd)
     }
 }
 
-float delta_pid_update(delta_pid_t *pid, float setpoint, float actual)
+float pid_delta_update(delta_pid_t *pid, float setpoint, float actual)
 {
     float error = setpoint - actual;
 

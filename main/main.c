@@ -46,6 +46,7 @@
 #define I2C_MASTER_TIMEOUT_MS 1000
 
 #define SENSOR_DATA_BUFFER_MAX 16
+#define ARMED_THRESHOLD 1950
 
 #define PORT CONFIG_EXAMPLE_PORT
 #undef CONFIG_ESP_WIFI_SOFTAP_SAE_SUPPORT
@@ -83,8 +84,11 @@ static const char *TAG = "TinyPlaneFC";
 static mpu6050_handle_t mpu6050 = NULL;
 static hp203_handle_t hp203 = NULL;
 static sensor_data_buffer_t sensor_data_buffer;
-static uint32_t motor_duty_l = 0;
-static uint32_t motor_duty_r = 0;
+static int throttle = 0;
+static int yaw = 0;
+static int pitch = 0;
+static int roll = 0;
+static int armed = 0;
 
 char addr_str[128];
 int addr_family = AF_INET;
@@ -145,10 +149,62 @@ static void sensor_data_buffer_init(void)
     sensor_data_buffer.sensor_data_write = 0;
 }
 
+static void play_armed_sound(void)
+{
+    uint32_t freq = 500;
+    for (int i = 0; i < 3; i++)
+    {
+        motor_set_frequency(freq << i);
+        motor_set_duty(50, 50);
+        vTaskDelay(pdMS_TO_TICKS(200));
+        motor_set_duty(0, 0);
+        vTaskDelay(pdMS_TO_TICKS(300));
+    }
+}
+
+static void play_disarmed_sound(void)
+{
+    uint32_t freq = 2000;
+    for (int i = 0; i < 3; i++)
+    {
+        motor_set_frequency(freq >> i);
+        motor_set_duty(50, 50);
+        vTaskDelay(pdMS_TO_TICKS(200));
+        motor_set_duty(0, 0);
+        vTaskDelay(pdMS_TO_TICKS(300));
+    }
+}
+
+static void update_actuator_task(void *pvParameters)
+{
+    motor_init_pid();
+    
+    while (armed)
+    {
+        motor_set_throttle(throttle, throttle);
+    }
+
+    vTaskDelete(NULL);
+}
 
 static void update_sensor_task(void *pvParameters)
 {
     sensor_data_t sensor_data;
+
+    while (!armed)
+    {
+        ESP_LOGI(TAG, "waiting for arming...");
+        if (throttle > ARMED_THRESHOLD)
+        {
+            ESP_LOGI(TAG, "armed!");
+            play_armed_sound();
+            armed = 1;
+            break;
+        }
+        vTaskDelay(pdMS_TO_TICKS(10));
+    }
+
+    xTaskCreate(update_actuator_task, "update_actuator", 1024 * 4, NULL, 2, NULL);
 
     while (xSemaphoreTake(sensor_data_buffer.mutex, portMAX_DELAY) == pdTRUE)
     {
@@ -161,8 +217,8 @@ static void update_sensor_task(void *pvParameters)
         sensor_data.bat_data.temperature = bat_get_temperature();
         // ESP_LOGI(TAG, "BAT Temperature: %d", sensor_data.bat_data.temperature);
 
-        sensor_data.motor_data.duty_l = motor_duty_l;
-        sensor_data.motor_data.duty_r = motor_duty_r;
+        sensor_data.motor_data.duty_l = throttle;
+        sensor_data.motor_data.duty_r = throttle;
         // ESP_LOGI(TAG, "Motor Duty L: %lu, R: %lu", sensor_data.motor_data.duty_l, sensor_data.motor_data.duty_r);
         motor_get_current(&sensor_data.motor_data.current_l, &sensor_data.motor_data.current_r);
         // ESP_LOGI(TAG, "Motor Current L: %ld, R: %ld", sensor_data.motor_data.current_l, sensor_data.motor_data.current_r);
@@ -223,11 +279,16 @@ static void udp_receive_task(void *pvParameters)
             inet_ntoa_r(((struct sockaddr_in *)&source_addr)->sin_addr, addr_str, sizeof(addr_str) - 1);
 
             // rx_buffer[len] = 0; // Null-terminate whatever we received and treat like a string...
-            motor_duty_l = *(uint32_t *)(&rx_buffer[0]);
-            motor_duty_r = *(uint32_t *)(&rx_buffer[4]);
-            motor_set_duty(motor_duty_l, motor_duty_r);
-            ESP_LOGI(TAG, "Received %d bytes from %s:", len, addr_str);
-            ESP_LOGI(TAG, "PWM Duty L: %d, R: %d", (int)motor_duty_l, (int)motor_duty_r);
+            throttle = *(int *)(&rx_buffer[0]);
+            yaw = *(int *)(&rx_buffer[4]);
+            pitch = *(int *)(&rx_buffer[8]);
+            roll = *(int *)(&rx_buffer[12]);
+
+            if (len != 16)
+            {
+                ESP_LOGE(TAG, "received data length error: %d", len);
+            }
+            ESP_LOGI(TAG, "Throttle: %d, Yaw: %d, Pitch: %d, Roll: %d", throttle, yaw, pitch, roll);
         }
 
         if (!wifi_connected)
@@ -337,7 +398,7 @@ static void wifi_event_handler(void* arg, esp_event_base_t event_base, int32_t e
         ESP_LOGI(TAG, "station " MACSTR " join, AID=%d", MAC2STR(event->mac), event->aid);
         wifi_connected = true;
         udp_init();
-        xTaskCreate(update_sensor_task, "updata_sensor", 1024 * 8, NULL, 5, NULL);
+        xTaskCreate(update_sensor_task, "update_sensor", 1024 * 8, NULL, 5, NULL);
     }
     else if (event_id == WIFI_EVENT_AP_STADISCONNECTED)
     {
@@ -420,6 +481,8 @@ void app_main(void)
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, BAT_TEMPERATURE_ADC_CHANNEL, &config));
 
     motor_init();
+    motor_update_current_offset();
+
     i2c_master_init();
     hp203_init();
     

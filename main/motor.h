@@ -37,6 +37,7 @@ typedef struct {
 
 void motor_init(void);
 void motor_update_current_offset(void);
+void motor_set_frequency(uint32_t frequency);
 void motor_set_duty(uint32_t duty_l, uint32_t duty_r);
 void motor_get_current(int *current_l, int *current_r);
 void motor_set_throttle(int throttle_l, int throttle_r);
