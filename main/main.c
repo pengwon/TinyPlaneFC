@@ -177,21 +177,6 @@ static void play_disarmed_sound(void)
 
 static void update_actuator_task(void *pvParameters)
 {
-    throttle = 1000;
-
-    motor_init_pid();
-    while (armed)
-    {
-        motor_set_throttle(throttle, throttle);
-    }
-
-    vTaskDelete(NULL);
-}
-
-static void update_sensor_task(void *pvParameters)
-{
-    sensor_data_t sensor_data;
-
     while (!armed)
     {
         ESP_LOGI(TAG, "waiting for arming...");
@@ -204,10 +189,29 @@ static void update_sensor_task(void *pvParameters)
             armed = 1;
             break;
         }
-        vTaskDelay(pdMS_TO_TICKS(10));
+        // vTaskDelay(pdMS_TO_TICKS(10));
     }
 
-    // xTaskCreate(update_actuator_task, "update_actuator", 1024 * 4, NULL, 2, NULL);
+    while (armed)
+    {
+        motor_set_throttle(throttle, throttle);
+
+        if (throttle < 1050 && pitch < 1050)
+        {
+            ESP_LOGI(TAG, "disarmed!");
+            armed = 0;
+            break;
+        }
+    }
+
+    play_disarmed_sound();
+
+    vTaskDelete(NULL);
+}
+
+static void update_sensor_task(void *pvParameters)
+{
+    sensor_data_t sensor_data;
 
     while (xSemaphoreTake(sensor_data_buffer.mutex, portMAX_DELAY) == pdTRUE)
     {
@@ -245,7 +249,6 @@ static void update_sensor_task(void *pvParameters)
         }
         
         sensor_data_buffer.sensor_data[sensor_data_buffer.sensor_data_write % SENSOR_DATA_BUFFER_MAX] = sensor_data;
-        motor_set_throttle(throttle, throttle);
         
         ESP_LOGI(TAG, "data_write: %d", (unsigned int)sensor_data_buffer.sensor_data_write);
         sensor_data_buffer.sensor_data_write++;
@@ -385,6 +388,7 @@ static void udp_init(void)
     }
     xTaskCreate(udp_receive_task, "udp_receive", 1024 * 4, (void*)AF_INET, 4, NULL);
     xTaskCreate(udp_send_task, "udp_send", 1024 * 4, (void*)AF_INET, 4, NULL);
+    xTaskCreate(update_actuator_task, "update_actuator", 1024 * 4, NULL, 2, NULL);
 }
 
 static void udp_deinit(void)
@@ -485,6 +489,7 @@ void app_main(void)
     ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, BAT_TEMPERATURE_ADC_CHANNEL, &config));
 
     motor_init();
+    motor_init_pid();
     motor_update_current_offset();
 
     i2c_master_init();
@@ -517,4 +522,22 @@ void app_main(void)
 
     // 这里可以继续执行其他初始化操作或任务
     // ...
+    play_armed_sound();
+
+    for (int i = 0; i < 100; i++)
+    {
+        motor_set_throttle(1200, 1200);
+    }
+
+    for (int i = 0; i < 100; i++)
+    {
+        motor_set_throttle(1300, 1300);
+    }
+
+    for (int i = 0; i < 100; i++)
+    {
+        motor_set_throttle(1000, 1000);
+    }
+
+    play_disarmed_sound();
 }

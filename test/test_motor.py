@@ -13,9 +13,9 @@ server_port = 3333
 server_address = (server_ip, server_port)
 
 throttle = 1000
-yaw = 1000
-pitch = 1000
-roll = 1000
+yaw = 1500
+pitch = 1500
+roll = 1500
 
 
 def increase_i():
@@ -32,12 +32,13 @@ def decrease_i():
 
 def start():
     global throttle, yaw, pitch, roll
-    throttle = 1500
+    throttle = 1200
 
 
 def stop():
     global throttle, yaw, pitch, roll
     throttle = 1000
+    pitch = 1000
 
 
 def send_data():
@@ -68,6 +69,14 @@ def receive_data():
 
 def arm():
     thro = 1951
+    client_socket.sendto(
+        thro.to_bytes(4, "little")
+        + thro.to_bytes(4, "little")
+        + thro.to_bytes(4, "little")
+        + thro.to_bytes(4, "little"),
+        server_address,
+    )
+    thro = 1000
     client_socket.sendto(
         thro.to_bytes(4, "little")
         + thro.to_bytes(4, "little")

@@ -6,7 +6,7 @@ extern adc_oneshot_unit_handle_t adc1_handle;
 
 static int current_offset_l = 0;
 static int current_offset_r = 0;
-static delta_pid_t pid;
+static abs_pid_t pid;
 static int duty_l = 0;
 static int duty_r = 0;
 
@@ -84,8 +84,8 @@ void motor_set_duty(uint32_t duty_l, uint32_t duty_r)
 
 void motor_get_current(int *current_l, int *current_r)
 {
-    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, L_MOTOR_ADC_CHANNEL, current_l));
-    ESP_ERROR_CHECK(adc_oneshot_read(adc1_handle, R_MOTOR_ADC_CHANNEL, current_r));
+    adc_oneshot_read(adc1_handle, L_MOTOR_ADC_CHANNEL, current_l);
+    adc_oneshot_read(adc1_handle, R_MOTOR_ADC_CHANNEL, current_r);
 
     *current_l -= current_offset_l;
     *current_r -= current_offset_r;
@@ -93,7 +93,7 @@ void motor_get_current(int *current_l, int *current_r)
 
 void motor_init_pid(void)
 {
-    pid_delta_init(&pid, MOTOR_KP, MOTOR_KI, MOTOR_KD);
+    pid_init(&pid, MOTOR_KP, MOTOR_KI, MOTOR_KD);
 }
 
 void motor_set_throttle(int throttle_l, int throttle_r)
@@ -107,19 +107,17 @@ void motor_set_throttle(int throttle_l, int throttle_r)
     throttle_r = throttle_r > MOTOR_THROTTLE_MAX ? MOTOR_THROTTLE_MAX : throttle_r;
     throttle_r = throttle_r < MOTOR_THROTTLE_MIN ? MOTOR_THROTTLE_MIN : throttle_r;
 
-    float setpoint_l = (throttle_l - MOTOR_THROTTLE_MIN) / (MOTOR_THROTTLE_MAX - MOTOR_THROTTLE_MIN) * MOTOR_CURRENT_MAX;
-    float setpoint_r = (throttle_r - MOTOR_THROTTLE_MIN) / (MOTOR_THROTTLE_MAX - MOTOR_THROTTLE_MIN) * MOTOR_CURRENT_MAX;
+    float setpoint_l = (float)(throttle_l - MOTOR_THROTTLE_MIN) / (MOTOR_THROTTLE_MAX - MOTOR_THROTTLE_MIN) * MOTOR_CURRENT_MAX;
+    float setpoint_r = (float)(throttle_r - MOTOR_THROTTLE_MIN) / (MOTOR_THROTTLE_MAX - MOTOR_THROTTLE_MIN) * MOTOR_CURRENT_MAX;
 
-    float delta_duty_l = pid_delta_update(&pid, setpoint_l, current_l);
-    float delta_duty_r = pid_delta_update(&pid, setpoint_r, current_r);
-    ESP_LOGI("MOTOR CURRENT", "L: %f, R: %f", delta_duty_l, delta_duty_r);
+    float duty_l = pid_update(&pid, setpoint_l, current_l);
+    float duty_r = pid_update(&pid, setpoint_r, current_r);
 
-    duty_l += delta_duty_l;
-    duty_r += delta_duty_r;
     duty_l = duty_l > MOTOR_PWM_DUTY_MAX ? MOTOR_PWM_DUTY_MAX : duty_l;
     duty_l = duty_l < MOTOR_PWM_DUTY_MIN ? MOTOR_PWM_DUTY_MIN : duty_l;
     duty_r = duty_r > MOTOR_PWM_DUTY_MAX ? MOTOR_PWM_DUTY_MAX : duty_r;
     duty_r = duty_r < MOTOR_PWM_DUTY_MIN ? MOTOR_PWM_DUTY_MIN : duty_r;
 
+    ESP_LOGI("MOTOR CURRENT", "L set: %f actual: %d duty: %f; R set: %f actual: %d duty: %f", setpoint_l, current_l, duty_l, setpoint_r, current_r, duty_r);
     motor_set_duty(duty_l, duty_r);
 }

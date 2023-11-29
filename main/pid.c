@@ -23,3 +23,29 @@ float pid_delta_update(delta_pid_t *pid, float setpoint, float actual)
     
     return output;
 }
+
+void pid_init(abs_pid_t *pid, float kp, float ki, float kd)
+{
+    pid->kp = kp;
+    pid->ki = ki;
+    pid->kd = kd;
+    pid->prev_error = 0.0;
+    pid->integral = 0.0;
+}
+
+float pid_update(abs_pid_t *pid, float setpoint, float actual)
+{
+    float error = setpoint - actual;
+
+    pid->integral += error;
+    pid->integral = pid->integral > INTEGRAL_MAX ? INTEGRAL_MAX : pid->integral;
+    pid->integral = pid->integral < -INTEGRAL_MAX ? -INTEGRAL_MAX : pid->integral;
+
+    float output = pid->kp * error +
+                   pid->ki * pid->integral +
+                   pid->kd * (error - pid->prev_error);
+
+    pid->prev_error = error;
+    
+    return output;
+}

@@ -13,7 +13,7 @@ extern "C" {
 #define L_MOTOR_IO_NUM 10
 #define R_MOTOR_IO_NUM 5
 
-#define MOTOR_ADC_ATTEN ADC_ATTEN_DB_11
+#define MOTOR_ADC_ATTEN ADC_ATTEN_DB_0
 #define MOTOR_ADC_VREF 1100
 #define L_MOTOR_ADC_CHANNEL ADC_CHANNEL_4
 #define R_MOTOR_ADC_CHANNEL ADC_CHANNEL_2
@@ -22,8 +22,8 @@ extern "C" {
 #define MOTOR_CURRENT_MIN 0
 #define MOTOR_THROTTLE_MAX 2000
 #define MOTOR_THROTTLE_MIN 1000
-#define MOTOR_KP 10
-#define MOTOR_KI 0.1
+#define MOTOR_KP 500
+#define MOTOR_KI 2.0
 #define MOTOR_KD 0.1
 
 
